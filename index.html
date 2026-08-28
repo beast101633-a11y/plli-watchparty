@@ -374,19 +374,41 @@
   .send-btn:disabled{opacity:0.5; cursor:not-allowed;}
 
   @media (max-width: 880px){
-    html, body{height:100%;}
-    #room{height:100vh; height:100dvh; overflow:hidden;}
+    html, body{height:100%; overflow:hidden;}
+    #room{height:100%; height:100dvh; overflow:hidden; display:flex; flex-direction:column;}
+
+    header{flex-shrink:0;}
+
+    /* main은 영상 + 채팅 세로 배치 — 영상은 고정 높이, 채팅이 나머지 차지 */
     main{
-      flex-direction:column; padding:12px; gap:0;
-      overflow:hidden; min-height:0; align-items:stretch;
+      flex:1; min-height:0;
+      flex-direction:column; padding:10px; gap:0;
+      overflow:hidden; align-items:stretch;
     }
-    .player-col{flex-shrink:0; width:100%;}
+
+    /* 영상은 항상 화면 위쪽에 고정 높이로 표시 */
+    .player-col{
+      flex-shrink:0; width:100%;
+    }
+    .player-frame{
+      aspect-ratio:16/9; width:100%;
+      border-radius:10px;
+    }
+
+    /* 채팅창은 영상 바로 아래에서 나머지 공간 차지 */
     .chat-col{
       width:100%; flex:1; min-height:0;
-      margin-left:0; margin-top:12px; position:relative; top:0; height:auto;
+      margin-left:0; margin-top:10px;
+      position:relative; top:0; height:auto;
     }
     .chat-log-wrap{flex:1; min-height:0;}
     .chat-log{flex:1; min-height:0;}
+
+    /* 채팅 입력창 — 키보드가 올라올 때 JS가 bottom을 조정 */
+    .chat-input-row{
+      position:relative;
+      transition: none;
+    }
   }
 
   /* ---------- fullscreen split view ---------- */
@@ -1288,6 +1310,39 @@
   document.addEventListener('webkitfullscreenchange', syncFullscreenBtnLabel);
   window.addEventListener('resize', () => { if(isFullscreenActive()) resizeFullscreenPlayer(); });
   window.addEventListener('orientationchange', () => { if(isFullscreenActive()) setTimeout(resizeFullscreenPlayer, 200); });
+
+  // ── 모바일 키보드 대응 ──────────────────────────────────────────
+  // 키보드가 올라오면 visualViewport의 높이가 줄어드는 것을 감지해서
+  // 채팅 입력창만 키보드 바로 위에 붙도록 chat-col 높이를 조정한다.
+  // 영상(.player-col)은 건드리지 않으므로 항상 화면 상단에 그대로 남는다.
+  (function setupMobileKeyboard(){
+    if(!window.visualViewport) return; // 미지원 브라우저는 패스
+    const chatCol = document.querySelector('.chat-col');
+    if(!chatCol) return;
+
+    function onViewportResize(){
+      const vvHeight = window.visualViewport.height;
+      const windowHeight = window.innerHeight;
+      const keyboardHeight = windowHeight - vvHeight;
+
+      if(window.innerWidth > 880) return; // 모바일에서만 적용
+
+      if(keyboardHeight > 50){
+        // 키보드가 올라온 상태 — chat-col 아래 여백을 키보드 높이만큼 줄임
+        chatCol.style.marginBottom = keyboardHeight + 'px';
+      } else {
+        chatCol.style.marginBottom = '';
+      }
+
+      // 채팅 로그를 맨 아래로 스크롤 (입력창 위로 최신 채팅이 보이도록)
+      const log = document.getElementById('chatLog');
+      if(log) log.scrollTop = log.scrollHeight;
+    }
+
+    window.visualViewport.addEventListener('resize', onViewportResize);
+    window.visualViewport.addEventListener('scroll', onViewportResize);
+  })();
+  // ────────────────────────────────────────────────────────────────
 
   // if YT API already loaded before script ran
   // (postMessage 방식으로 전환하면서 별도 API 로딩 대기 불필요)
