@@ -22,6 +22,7 @@
     --accent-b:#9b8cff;   /* violet glow */
     --accent-grad: linear-gradient(120deg, var(--accent-a), var(--accent-b));
     --danger:#ff6b81;
+    --host-pink:#ff7fb0;
   }
   *{box-sizing:border-box; margin:0; padding:0;}
   body{
@@ -278,16 +279,34 @@
     font-size:11px; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-lo);
     padding:10px 12px; border-bottom:1px solid var(--line);
   }
+  .user-list-panel{width:230px;}
   .user-list-items{list-style:none; overflow-y:auto; padding:6px;}
   .user-list-items li{
     display:flex; align-items:center; gap:7px; padding:7px 8px; border-radius:8px; font-size:13px;
   }
   .user-list-items li:hover{background:rgba(255,255,255,0.04);}
   .user-list-items .dot{width:6px; height:6px; border-radius:50%; background:var(--accent-a); flex-shrink:0;}
+  .user-list-items .uname{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .user-list-items li.is-host .dot{background:var(--host-pink); box-shadow:0 0 6px var(--host-pink);}
+  .user-list-items li.is-host .uname{color:var(--host-pink); font-weight:600;}
   .user-list-items .host-tag{
-    font-size:9px; color:var(--accent-a); border:1px solid var(--accent-a); border-radius:4px;
-    padding:1px 4px; margin-left:auto; letter-spacing:0.03em;
+    font-size:9px; color:var(--host-pink); border:1px solid var(--host-pink); border-radius:4px;
+    padding:1px 4px; letter-spacing:0.03em; flex-shrink:0;
   }
+  .user-list-items .mute-tag{
+    font-size:9px; color:var(--text-lo); border:1px solid var(--line); border-radius:4px;
+    padding:1px 4px; letter-spacing:0.03em; flex-shrink:0;
+  }
+  .user-list-items .spacer{flex:1;}
+  .user-actions{display:flex; gap:4px; flex-shrink:0; margin-left:auto;}
+  .user-actions button{
+    background:var(--bg-1); border:1px solid var(--line); color:var(--text-lo);
+    font-size:11px; padding:3px 6px; border-radius:6px; cursor:pointer; line-height:1;
+    flex-shrink:0;
+  }
+  .user-actions button:hover{color:var(--text-hi); border-color:var(--accent-a);}
+  .user-actions button.mute-action.active{color:var(--danger); border-color:var(--danger);}
+  .user-actions button.kick-action:hover{color:var(--danger); border-color:var(--danger);}
 
   /* ---------- room closing overlay ---------- */
   .closing-overlay{
@@ -316,6 +335,13 @@
     padding:14px 16px; border-bottom:1px solid var(--line);
     font-size:12px; color:var(--text-lo); display:flex; justify-content:space-between;
   }
+  .closing-banner{
+    display:flex; align-items:center; gap:8px; justify-content:center;
+    padding:9px 12px; font-size:12.5px; color:var(--danger);
+    background:rgba(255,107,129,0.1); border-bottom:1px solid rgba(255,107,129,0.35);
+  }
+  .closing-banner.hidden{display:none;}
+  .chat-log-wrap{position:relative; flex:1; min-height:0; display:flex;}
   .chat-log{flex:1; overflow-y:auto; padding:14px 16px; display:flex; flex-direction:column; gap:10px;}
   .chat-log::-webkit-scrollbar{width:5px;}
   .chat-log::-webkit-scrollbar-thumb{background:var(--line); border-radius:4px;}
@@ -325,6 +351,13 @@
   .msg .body-text{font-size:13.5px; line-height:1.45; color:#dadeff; word-break:break-word;}
   .msg.me .who{color:var(--accent-a);}
   .msg.sys{opacity:0.55; font-size:11.5px; font-style:italic;}
+  .new-msg-btn{
+    position:absolute; left:50%; bottom:12px; transform:translateX(-50%);
+    background:var(--accent-grad); color:#0a0d1c; border:none; font-weight:600;
+    font-size:12px; padding:7px 14px; border-radius:999px; cursor:pointer;
+    box-shadow:0 6px 18px rgba(0,0,0,0.4); z-index:5; font-family:'Inter';
+  }
+  .new-msg-btn.hidden{display:none;}
   .chat-input-row{
     display:flex; gap:8px; padding:12px; border-top:1px solid var(--line);
   }
@@ -333,10 +366,12 @@
     padding:10px 12px; border-radius:9px; font-size:13px; outline:none;
   }
   .chat-input-row input:focus{border-color:var(--accent-a);}
+  .chat-input-row input:disabled{opacity:0.5; cursor:not-allowed;}
   .send-btn{
     background:var(--accent-grad); border:none; color:#0a0d1c; font-weight:600;
     padding:0 16px; border-radius:9px; cursor:pointer; font-size:13px;
   }
+  .send-btn:disabled{opacity:0.5; cursor:not-allowed;}
 
   @media (max-width: 880px){
     html, body{height:100%;}
@@ -350,6 +385,7 @@
       width:100%; flex:1; min-height:0;
       margin-left:0; margin-top:12px; position:relative; top:0; height:auto;
     }
+    .chat-log-wrap{flex:1; min-height:0;}
     .chat-log{flex:1; min-height:0;}
   }
 
@@ -358,11 +394,16 @@
     max-width:none; width:100vw; height:100vh;
     background:var(--bg-0); padding:10px; overflow-y:auto;
   }
-  main:fullscreen .chat-col, main:-webkit-full-screen .chat-col{
-    height:calc(100vh - 20px); top:0; width:300px; margin-left:14px;
+  main:fullscreen .player-col, main:-webkit-full-screen .player-col{
+    display:flex; flex-direction:column; align-items:center;
   }
+  main:fullscreen .chat-col, main:-webkit-full-screen .chat-col{
+    height:calc(100vh - 20px); top:0; width:300px; margin-left:14px; flex-shrink:0;
+  }
+  /* 전체화면 중에는 JS가 .player-frame 에 인라인 width/height를 직접 계산해서
+     디스플레이 크기에 맞춰 좌우 여백 없이 꽉 차도록 지정함 (resizeFullscreenPlayer 참고) */
   main:fullscreen .player-frame, main:-webkit-full-screen .player-frame{
-    max-height:calc(100vh - 20px);
+    flex-shrink:0; aspect-ratio:auto;
   }
   @media (max-width: 880px){
     main:fullscreen, main:-webkit-full-screen{
