@@ -78,7 +78,7 @@
     letter-spacing:0.02em;
   }
   .field{margin-bottom:18px;}
-  input[type=text]{
+  input[type=text], input[type=password]{
     width:100%;
     background:var(--bg-1);
     border:1px solid var(--line);
@@ -90,8 +90,8 @@
     outline:none;
     transition:border-color .15s;
   }
-  input[type=text]:focus{border-color:var(--accent-a);}
-  input[type=text]::placeholder{color:#565d80;}
+  input[type=text]:focus, input[type=password]:focus{border-color:var(--accent-a);}
+  input[type=text]::placeholder, input[type=password]::placeholder{color:#565d80;}
   .tabs{display:flex; gap:6px; margin-bottom:20px; background:var(--bg-1); padding:4px; border-radius:10px; border:1px solid var(--line);}
   .tab{
     flex:1; text-align:center; padding:9px 0; border-radius:8px; font-size:13px;
@@ -243,6 +243,13 @@
     padding:6px 7px; border-radius:999px; border:1px solid rgba(255,255,255,0.08);
     transition:opacity .2s;
   }
+  .reaction-buttons{display:flex; align-items:center; gap:5px;}
+  .reaction-bar.collapsed .reaction-buttons{display:none;}
+  .reaction-collapse-btn{
+    background:none; border:none; font-size:16px; cursor:pointer;
+    line-height:1; padding:4px; border-radius:50%; transition:transform .1s, background .15s;
+  }
+  .reaction-collapse-btn:hover{background:rgba(255,255,255,0.08); transform:scale(1.1);}
   .reaction-bar button{
     background:none; border:none; font-size:16px; cursor:pointer;
     line-height:1; padding:4px; border-radius:50%; transition:transform .1s, background .15s;
@@ -332,20 +339,38 @@
   }
 
   @media (max-width: 880px){
-    main{flex-direction:column; padding:14px;}
-    .chat-col{width:100%; height:420px; margin-left:0; margin-top:16px; position:relative; top:0;}
+    html, body{height:100%;}
+    #room{height:100vh; height:100dvh; overflow:hidden;}
+    main{
+      flex-direction:column; padding:12px; gap:0;
+      overflow:hidden; min-height:0;
+    }
+    .player-col{flex-shrink:0;}
+    .chat-col{
+      width:100%; flex:1; min-height:0;
+      margin-left:0; margin-top:12px; position:relative; top:0; height:auto;
+    }
+    .chat-log{flex:1; min-height:0;}
   }
 
   /* ---------- fullscreen split view ---------- */
   main:fullscreen, main:-webkit-full-screen{
     max-width:none; width:100vw; height:100vh;
-    background:var(--bg-0); padding:24px; overflow-y:auto;
+    background:var(--bg-0); padding:10px; overflow-y:auto;
   }
   main:fullscreen .chat-col, main:-webkit-full-screen .chat-col{
-    height:calc(100vh - 48px); top:0;
+    height:calc(100vh - 20px); top:0; width:300px; margin-left:14px;
   }
   main:fullscreen .player-frame, main:-webkit-full-screen .player-frame{
-    max-height:calc(100vh - 48px);
+    max-height:calc(100vh - 20px);
+  }
+  @media (max-width: 880px){
+    main:fullscreen, main:-webkit-full-screen{
+      padding:8px;
+    }
+    main:fullscreen .chat-col, main:-webkit-full-screen .chat-col{
+      width:100%; margin-left:0; height:auto; flex:1;
+    }
   }
 </style>
 </head>
@@ -358,14 +383,25 @@
     <h1 class="display">플리들과 같이보기</h1>
     <p class="sub">유튜브 라이브 다시보기를 함께 재생하고, 실시간으로 채팅하며 그날의 감동을 다시 나눠요.</p>
 
+    <div class="tabs">
+      <div class="tab" id="tabCreate">호스트로 입장하기</div>
+      <div class="tab active" id="tabJoin">방 참여하기</div>
+    </div>
+
     <div class="field">
       <label>닉네임</label>
       <input type="text" id="nickname" placeholder="예: 플리123" maxlength="16">
     </div>
 
-    <div class="field hidden" id="createFields">
-      <label>유튜브 영상 URL</label>
-      <input type="text" id="videoUrl" placeholder="https://www.youtube.com/watch?v=...">
+    <div class="hidden" id="createFields">
+      <div class="field">
+        <label>호스트 비밀번호</label>
+        <input type="password" id="hostPassword" placeholder="비밀번호 입력" autocomplete="off">
+      </div>
+      <div class="field">
+        <label>유튜브 영상 URL</label>
+        <input type="text" id="videoUrl" placeholder="https://www.youtube.com/watch?v=...">
+      </div>
     </div>
 
     <div class="field" id="joinFields">
@@ -375,7 +411,7 @@
 
     <button class="btn" id="enterBtn">입장하기</button>
     <div class="err" id="landingErr"></div>
-    <div class="hint">호스트에게 받은 방 코드를 입력하고 입장하세요. 호스트가 재생을 조작하면 화면이 함께 동기화돼요.</div>
+    <div class="hint" id="landingHint">호스트에게 받은 방 코드를 입력하고 입장하세요. 호스트가 재생을 조작하면 화면이 함께 동기화돼요.</div>
   </div>
 </div>
 
@@ -403,13 +439,16 @@
         <div id="player"></div>
         <button id="unmuteBtn" class="unmute-btn hidden">🔇 소리 켜기</button>
         <div class="reaction-overlay" id="reactionOverlay"></div>
-        <div class="reaction-bar">
-          <button data-emoji="👍" title="좋아요">👍</button>
-          <button data-emoji="❤️" title="사랑해요">❤️</button>
-          <button data-emoji="😂" title="웃겨요">😂</button>
-          <button data-emoji="😮" title="놀라워요">😮</button>
-          <button data-emoji="👏" title="박수">👏</button>
-          <button class="reaction-toggle-btn" id="reactionToggleBtn" title="리액션 표시 끄기/켜기">👁️</button>
+        <div class="reaction-bar" id="reactionBar">
+          <button class="reaction-collapse-btn" id="reactionCollapseBtn" title="이모지 패널 열기/닫기">🎉</button>
+          <div class="reaction-buttons" id="reactionButtons">
+            <button data-emoji="👍" title="좋아요">👍</button>
+            <button data-emoji="❤️" title="사랑해요">❤️</button>
+            <button data-emoji="😂" title="웃겨요">😂</button>
+            <button data-emoji="😮" title="놀라워요">😮</button>
+            <button data-emoji="👏" title="박수">👏</button>
+            <button class="reaction-toggle-btn" id="reactionToggleBtn" title="리액션 표시 끄기/켜기">👁️</button>
+          </div>
         </div>
       </div>
       <div class="waveline"><div class="waveline-fill" id="waveFill"></div></div>
@@ -536,8 +575,29 @@
     return encodeURIComponent(nick).replace(/\./g, '%2E');
   }
 
-  // ---------- landing (참여자 전용: 방 만들기 없음, 항상 참여 모드) ----------
-  const mode = 'join';
+  // ---------- landing tabs ----------
+  const tabCreate = document.getElementById('tabCreate');
+  const tabJoin = document.getElementById('tabJoin');
+  const createFields = document.getElementById('createFields');
+  const joinFields = document.getElementById('joinFields');
+  const landingHint = document.getElementById('landingHint');
+  let mode = 'join';
+
+  const CREATE_HINT = '방을 만들면 방 코드가 생성돼요. 그 코드를 플리들에게 공유해서 함께 시청하세요. 호스트 비밀번호가 맞아야 방을 만들 수 있어요.<br><br>호스트인데 새로고침했거나 재접속해야 한다면, 방을 새로 만들지 말고 <b>\'방 참여하기\'</b>에서 같은 코드로 다시 들어오세요. 자동으로 호스트 권한이 복구돼요.';
+  const JOIN_HINT = '호스트에게 받은 방 코드를 입력하고 입장하세요. 호스트가 재생을 조작하면 화면이 함께 동기화돼요.';
+
+  tabCreate.onclick = () => {
+    mode = 'create';
+    tabCreate.classList.add('active'); tabJoin.classList.remove('active');
+    createFields.classList.remove('hidden'); joinFields.classList.add('hidden');
+    landingHint.innerHTML = CREATE_HINT;
+  };
+  tabJoin.onclick = () => {
+    mode = 'join';
+    tabJoin.classList.add('active'); tabCreate.classList.remove('active');
+    joinFields.classList.remove('hidden'); createFields.classList.add('hidden');
+    landingHint.innerHTML = JOIN_HINT;
+  };
 
   const errEl = document.getElementById('landingErr');
   const nicknameInput = document.getElementById('nickname');
@@ -556,6 +616,7 @@
     nicknameInput.classList.remove('invalid');
     document.getElementById('videoUrl').classList.remove('invalid');
     document.getElementById('roomCodeInput').classList.remove('invalid');
+    document.getElementById('hostPassword').classList.remove('invalid');
   }
   nicknameInput.addEventListener('input', () => nicknameInput.classList.remove('invalid'));
 
@@ -569,6 +630,8 @@
     const key = nickKey(nick);
 
     if(mode === 'create'){
+      const pw = document.getElementById('hostPassword').value;
+      if(pw !== 'hari3951!'){ showErr('호스트 비밀번호가 올바르지 않습니다.', {field:document.getElementById('hostPassword')}); return; }
       const url = document.getElementById('videoUrl').value.trim();
       const vid = extractVideoId(url);
       if(!vid){ showErr('올바른 유튜브 URL을 입력해주세요.', {field:document.getElementById('videoUrl')}); return; }
@@ -973,6 +1036,19 @@
   let lastReactionIds = new Set();
   let reactionsStartedAt = Date.now();
   let reactionsEnabled = localStorage.getItem('reactionsEnabled') !== 'off';
+
+  const reactionBar = document.getElementById('reactionBar');
+  const reactionCollapseBtn = document.getElementById('reactionCollapseBtn');
+  let reactionBarCollapsed = localStorage.getItem('reactionBarCollapsed') !== '0'; // 기본값: 접힌 상태
+  function syncReactionBarCollapse(){
+    reactionBar.classList.toggle('collapsed', reactionBarCollapsed);
+  }
+  syncReactionBarCollapse();
+  reactionCollapseBtn.onclick = () => {
+    reactionBarCollapsed = !reactionBarCollapsed;
+    localStorage.setItem('reactionBarCollapsed', reactionBarCollapsed ? '1' : '0');
+    syncReactionBarCollapse();
+  };
 
   const reactionToggleBtn = document.getElementById('reactionToggleBtn');
   function syncReactionToggleBtn(){
