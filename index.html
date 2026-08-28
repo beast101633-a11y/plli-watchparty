@@ -378,9 +378,9 @@
     #room{height:100vh; height:100dvh; overflow:hidden;}
     main{
       flex-direction:column; padding:12px; gap:0;
-      overflow:hidden; min-height:0;
+      overflow:hidden; min-height:0; align-items:stretch;
     }
-    .player-col{flex-shrink:0;}
+    .player-col{flex-shrink:0; width:100%;}
     .chat-col{
       width:100%; flex:1; min-height:0;
       margin-left:0; margin-top:12px; position:relative; top:0; height:auto;
@@ -392,25 +392,28 @@
   /* ---------- fullscreen split view ---------- */
   main:fullscreen, main:-webkit-full-screen{
     max-width:none; width:100vw; height:100vh;
-    background:var(--bg-0); padding:10px; overflow-y:auto;
+    background:var(--bg-0); padding:12px; overflow-y:auto; align-items:flex-start;
   }
   main:fullscreen .player-col, main:-webkit-full-screen .player-col{
-    display:flex; flex-direction:column; align-items:center;
+    display:flex; flex-direction:column; align-items:center; flex-shrink:0;
   }
   main:fullscreen .chat-col, main:-webkit-full-screen .chat-col{
-    height:calc(100vh - 20px); top:0; width:300px; margin-left:14px; flex-shrink:0;
+    height:calc(100vh - 24px); top:0; width:300px; margin-left:14px; flex-shrink:0;
   }
-  /* 전체화면 중에는 JS가 .player-frame 에 인라인 width/height를 직접 계산해서
-     디스플레이 크기에 맞춰 좌우 여백 없이 꽉 차도록 지정함 (resizeFullscreenPlayer 참고) */
+  /* 전체화면 중에는 JS(resizeFullscreenPlayer)가 화면 크기를 재서
+     .player-frame 에 인라인 width/height(px)를 직접 지정함 — 아래 값은 계산 전 임시값 */
   main:fullscreen .player-frame, main:-webkit-full-screen .player-frame{
-    flex-shrink:0; aspect-ratio:auto;
+    flex-shrink:0; width:100%;
   }
   @media (max-width: 880px){
     main:fullscreen, main:-webkit-full-screen{
-      padding:8px;
+      padding:8px; align-items:stretch;
+    }
+    main:fullscreen .player-col, main:-webkit-full-screen .player-col{
+      width:100%; align-items:center; padding-top:14px;
     }
     main:fullscreen .chat-col, main:-webkit-full-screen .chat-col{
-      width:100%; margin-left:0; height:auto; flex:1;
+      width:100%; margin-left:0; height:auto; flex:1; margin-top:12px;
     }
   }
 </style>
@@ -1239,11 +1242,52 @@
       if(exit) exit.call(document);
     }
   };
+
+  // 전체화면일 때 영상 크기를 화면에 맞춰 직접 계산 (좌우 여백 없이 꽉 차게 / 채팅과 겹치지 않게)
+  const MOBILE_BREAKPOINT = 880;
+  function resizeFullscreenPlayer(){
+    const frame = document.querySelector('.player-frame');
+    const playerCol = document.querySelector('.player-col');
+    if(!frame || !playerCol) return;
+
+    if(!isFullscreenActive()){
+      // 전체화면이 아니면 인라인 스타일을 지워서 기본 카드 레이아웃(16:9, width:100%)으로 되돌림
+      frame.style.width = '';
+      frame.style.height = '';
+      return;
+    }
+
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    if(vw < MOBILE_BREAKPOINT){
+      // 모바일: 세로로 쌓임 → 영상은 화면 폭에 거의 꽉 차게, 남는 세로 공간은 채팅이 차지
+      const w = playerCol.clientWidth;
+      const h = Math.round(w * 9 / 16);
+      frame.style.width = w + 'px';
+      frame.style.height = h + 'px';
+    } else {
+      // 데스크톱/가로: 영상 + 채팅이 나란히, 화면 높이를 넘지 않도록 영상 크기 계산
+      const chatColWidth = 300 + 14; // .chat-col 너비 + margin-left
+      const mainPad = 24; // main 좌우 패딩 합
+      const availW = Math.max(240, vw - chatColWidth - mainPad);
+      const availH = Math.max(160, vh - 24);
+      let w = availW, h = Math.round(w * 9 / 16);
+      if(h > availH){ h = availH; w = Math.round(h * 16 / 9); }
+      frame.style.width = w + 'px';
+      frame.style.height = h + 'px';
+    }
+  }
+
   function syncFullscreenBtnLabel(){
     fullscreenBtn.textContent = isFullscreenActive() ? '⤡ 전체화면 종료' : '⛶ 전체화면';
+    // 브라우저가 전체화면 레이아웃을 적용한 직후에 재야 정확한 크기가 나오므로 한 프레임 뒤에 계산
+    requestAnimationFrame(resizeFullscreenPlayer);
   }
   document.addEventListener('fullscreenchange', syncFullscreenBtnLabel);
   document.addEventListener('webkitfullscreenchange', syncFullscreenBtnLabel);
+  window.addEventListener('resize', () => { if(isFullscreenActive()) resizeFullscreenPlayer(); });
+  window.addEventListener('orientationchange', () => { if(isFullscreenActive()) setTimeout(resizeFullscreenPlayer, 200); });
 
   // if YT API already loaded before script ran
   // (postMessage 방식으로 전환하면서 별도 API 로딩 대기 불필요)
