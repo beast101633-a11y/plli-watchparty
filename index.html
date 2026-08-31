@@ -3,7 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<!-- iOS Safari: 상태바 영역까지 화면을 채움 -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>같이보기 · Sync Watch</title>
@@ -367,7 +366,7 @@
   .chat-input-row input{
     flex:1; background:var(--bg-0); border:1px solid var(--line); color:var(--text-hi);
     padding:10px 12px; border-radius:9px; font-size:16px; outline:none;
-    /* iOS가 16px 미만 input을 자동 줌인하는 것을 막기 위해 16px로 고정 */
+    /* iOS는 input font-size 16px 미만이면 자동으로 화면을 zoom in — 16px로 고정 */
   }
   .chat-input-row input:focus{border-color:var(--accent-a);}
   .chat-input-row input:disabled{opacity:0.5; cursor:not-allowed;}
@@ -378,56 +377,41 @@
   .send-btn:disabled{opacity:0.5; cursor:not-allowed;}
 
   @media (max-width: 880px){
-    html{ height: 100%; }
-    body{ height: 100%; overflow: hidden; }
+    html, body{height:100%; overflow:hidden;}
+    #room{height:100%; height:100dvh; overflow:hidden; display:flex; flex-direction:column;}
 
-    /* room 전체를 화면에 꽉 채우되 넘치지 않게 */
-    #room{
-      height: 100%;
-      height: 100dvh;
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-    }
+    header{flex-shrink:0;}
 
-    header{ flex-shrink: 0; }
-
+    /* main은 영상 + 채팅 세로 배치 — 영상은 고정 높이, 채팅이 나머지 차지 */
     main{
-      flex: 1;
-      min-height: 0;
-      flex-direction: column;
-      padding: 10px 10px 0 10px;
-      gap: 0;
-      overflow: hidden;
-      align-items: stretch;
+      flex:1; min-height:0;
+      flex-direction:column; padding:10px; gap:0;
+      overflow:hidden; align-items:stretch;
     }
 
-    /* 영상: 고정 높이(화면 너비 기준 16:9), 절대 줄어들지 않음 */
+    /* 영상은 항상 화면 위쪽에 고정 높이로 표시 */
     .player-col{
-      flex-shrink: 0;
-      width: 100%;
+      flex-shrink:0; width:100%;
     }
     .player-frame{
-      width: 100%;
-      /* JS가 실제 픽셀 높이를 계산해서 넣어줌 */
-      border-radius: 10px;
+      aspect-ratio:16/9; width:100%;
+      border-radius:10px;
     }
 
-    /* 채팅창: 영상 아래 남은 공간 전부 차지 */
+    /* 채팅창은 영상 바로 아래에서 나머지 공간 차지 */
     .chat-col{
-      width: 100%;
-      flex: 1;
-      min-height: 0;
-      margin-left: 0;
-      margin-top: 10px;
-      position: relative;
-      top: 0;
-      height: auto;
-      /* iOS 키보드 대응: JS가 padding-bottom을 조정해서 입력창을 키보드 위로 올림 */
-      transition: padding-bottom 0s;
+      width:100%; flex:1; min-height:0;
+      margin-left:0; margin-top:10px;
+      position:relative; top:0; height:auto;
     }
-    .chat-log-wrap{ flex: 1; min-height: 0; }
-    .chat-log{ flex: 1; min-height: 0; }
+    .chat-log-wrap{flex:1; min-height:0;}
+    .chat-log{flex:1; min-height:0;}
+
+    /* 채팅 입력창 — 키보드가 올라올 때 JS가 bottom을 조정 */
+    .chat-input-row{
+      position:relative;
+      transition: none;
+    }
   }
 
   /* ---------- fullscreen split view ---------- */
@@ -1330,88 +1314,96 @@
   window.addEventListener('resize', () => { if(isFullscreenActive()) resizeFullscreenPlayer(); });
   window.addEventListener('orientationchange', () => { if(isFullscreenActive()) setTimeout(resizeFullscreenPlayer, 200); });
 
-  // ── iOS 전체화면 버튼 예외 처리 ──────────────────────────────────
-  // iOS Safari/Chrome은 requestFullscreen을 지원하지 않으므로 버튼을 숨김
-  (function handleIOS(){
+  // ── iOS 전체화면 버튼 숨기기 ─────────────────────────────────────
+  // iOS Safari/Chrome은 requestFullscreen API 자체를 막아놔서 눌러도 아무 반응 없음 → 숨김
+  (function handleIOSFullscreen(){
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
                   (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     if(!isIOS) return;
-
-    // 전체화면 버튼 숨기기
     const btn = document.getElementById('fullscreenBtn');
     if(btn) btn.style.display = 'none';
+  })();
 
-    // iOS: 키보드 올라올 때 chat-col 높이를 직접 줄여서 영상이 밀리지 않게 함
-    // paddingBottom 방식은 iOS에서 레이아웃을 위로 밀어버려서 영상이 가려지므로,
-    // chat-col의 max-height를 직접 줄이는 방식으로 처리
-    const chatCol = document.querySelector('.chat-col');
-    const chatLog = document.getElementById('chatLog');
+  // ── 모바일 키보드 대응 (iOS / Android 분리 처리) ─────────────────
+  (function setupMobileKeyboard(){
+    if(!window.visualViewport) return;
+    if(window.innerWidth > 880) return;
+
+    const chatCol   = document.querySelector('.chat-col');
+    const chatLog   = document.getElementById('chatLog');
     const chatInput = document.getElementById('chatInput');
     if(!chatCol || !chatInput) return;
 
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+                  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
     let baseHeight = 0;
 
-    function onFocus(){
-      if(window.innerWidth > 880) return;
-      // iOS는 focus 직후 visualViewport가 아직 안 줄었을 수 있어서 잠깐 기다림
-      setTimeout(()=>{
-        const vv = window.visualViewport;
-        if(!vv) return;
-        const keyboardH = window.innerHeight - vv.height;
-        if(keyboardH > 50){
-          // 현재 chat-col 높이에서 키보드 높이만큼 빼줌
-          if(!baseHeight) baseHeight = chatCol.getBoundingClientRect().height;
-          const newH = Math.max(80, baseHeight - keyboardH);
-          chatCol.style.height = newH + 'px';
-          chatCol.style.minHeight = newH + 'px';
-        }
-        if(chatLog) setTimeout(()=>{ chatLog.scrollTop = chatLog.scrollHeight; }, 80);
-      }, 350);
+    function scrollChatBottom(){
+      if(chatLog) setTimeout(()=>{ chatLog.scrollTop = chatLog.scrollHeight; }, 60);
     }
 
-    function onBlur(){
-      if(window.innerWidth > 880) return;
-      chatCol.style.height = '';
-      chatCol.style.minHeight = '';
-      baseHeight = 0;
-    }
-
-    chatInput.addEventListener('focus', onFocus);
-    chatInput.addEventListener('blur', onBlur);
-
-    // visualViewport resize로도 대응 (iPad 등)
-    if(window.visualViewport){
+    if(isIOS){
+      // iOS: paddingBottom이 위쪽 레이아웃을 밀어 영상을 가리므로
+      // 대신 chat-col의 height 자체를 키보드 높이만큼 줄임
+      function onFocus(){
+        if(window.innerWidth > 880) return;
+        setTimeout(()=>{
+          const keyboardH = window.innerHeight - window.visualViewport.height;
+          if(keyboardH > 50){
+            if(!baseHeight) baseHeight = chatCol.getBoundingClientRect().height;
+            const newH = Math.max(80, baseHeight - keyboardH);
+            chatCol.style.height    = newH + 'px';
+            chatCol.style.minHeight = newH + 'px';
+          }
+          scrollChatBottom();
+        }, 350);
+      }
+      function onBlur(){
+        if(window.innerWidth > 880) return;
+        chatCol.style.height    = '';
+        chatCol.style.minHeight = '';
+        baseHeight = 0;
+      }
+      chatInput.addEventListener('focus', onFocus);
+      chatInput.addEventListener('blur',  onBlur);
       window.visualViewport.addEventListener('resize', ()=>{
         if(document.activeElement === chatInput) onFocus();
         else onBlur();
       });
+    } else {
+      // Android: marginBottom 방식으로 채팅창을 키보드 위로 올림
+      function adjust(){
+        if(window.innerWidth > 880){ chatCol.style.marginBottom = ''; return; }
+        const keyboardH = window.innerHeight - window.visualViewport.height;
+        chatCol.style.marginBottom = keyboardH > 50 ? keyboardH + 'px' : '';
+        scrollChatBottom();
+      }
+      window.visualViewport.addEventListener('resize', adjust);
+      window.visualViewport.addEventListener('scroll', adjust);
     }
-  })();
-
-  // ── Android 모바일 키보드 대응 ───────────────────────────────────
-  (function setupAndroidKeyboard(){
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-                  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    if(isIOS) return; // iOS는 위에서 처리
-    if(!window.visualViewport) return;
-    if(window.innerWidth > 880) return;
-
-    const chatCol = document.querySelector('.chat-col');
-    const chatLog = document.getElementById('chatLog');
-    if(!chatCol) return;
-
-    function adjust(){
-      if(window.innerWidth > 880){ chatCol.style.paddingBottom = ''; return; }
-      const keyboardH = window.innerHeight - window.visualViewport.height;
-      chatCol.style.paddingBottom = keyboardH > 50 ? keyboardH + 'px' : '';
-      if(chatLog) setTimeout(()=>{ chatLog.scrollTop = chatLog.scrollHeight; }, 50);
-    }
-
-    window.visualViewport.addEventListener('resize', adjust);
-    window.visualViewport.addEventListener('scroll', adjust);
   })();
   // ─────────────────────────────────────────────────────────────────
 
+  // ── 접속자 세션 유지 (다른 화면 갔다 와도 끊기지 않게) ──────────
+  // onDisconnect().remove()는 실제 소켓이 끊길 때만 동작하는데,
+  // 모바일에서 다른 앱/탭으로 갔다 오면 소켓이 잠시 끊겼다 재연결되면서
+  // 사용자가 목록에서 사라졌다 다시 나타나는 현상이 생김.
+  // → visibilitychange 이벤트를 감지해서 탭이 다시 보일 때 presence를 재등록.
+  (function setupVisibilityPresence(){
+    document.addEventListener('visibilitychange', async ()=>{
+      if(document.visibilityState === 'visible' && roomCode && myUserKey){
+        try{
+          const ref = db.ref('rooms/'+roomCode+'/users/'+myUserKey);
+          await ref.set({ nick: nickname, ts: Date.now(), host: isHost });
+          ref.onDisconnect().remove();
+        }catch(e){}
+      }
+    });
+  })();
+  // ─────────────────────────────────────────────────────────────────
+
+  // if YT API already loaded before script ran
   // (postMessage 방식으로 전환하면서 별도 API 로딩 대기 불필요)
 })();
 </script>
