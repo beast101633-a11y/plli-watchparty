@@ -760,6 +760,35 @@
     const ref = db.ref('rooms/'+code+'/users/'+key);
     await ref.set({ nick: nickname, ts: Date.now(), host: isHost });
     ref.onDisconnect().remove();
+
+    // ── 연결 복구 시 자동 재등록 ───────────────────────────────────
+    // Firebase가 끊겼다 다시 연결될 때마다 onDisconnect가 리셋되고
+    // presence를 다시 써줘야 목록에서 살아남음.
+    // .info/connected 노드는 Firebase가 연결 상태를 실시간으로 알려주는 특수 경로.
+    const connectedRef = db.ref('.info/connected');
+    connectedRef.on('value', async (snap)=>{
+      if(snap.val() === true && roomCode && myUserKey){
+        // 연결이 막 복구된 순간 — onDisconnect 재예약 후 presence 재등록
+        const presRef = db.ref('rooms/'+roomCode+'/users/'+myUserKey);
+        presRef.onDisconnect().remove();
+        try{
+          await presRef.set({ nick: nickname, ts: Date.now(), host: isHost });
+        }catch(e){}
+      }
+    });
+
+    // ── 화면 켤 때 추가 안전망 ─────────────────────────────────────
+    // 드물게 Firebase 연결은 살아있지만 visibility 복귀 타이밍에
+    // connectedRef 이벤트가 안 오는 경우를 대비한 이중 처리.
+    document.addEventListener('visibilitychange', async ()=>{
+      if(document.visibilityState === 'visible' && roomCode && myUserKey){
+        try{
+          const presRef = db.ref('rooms/'+roomCode+'/users/'+myUserKey);
+          presRef.onDisconnect().remove();
+          await presRef.set({ nick: nickname, ts: Date.now(), host: isHost });
+        }catch(e){}
+      }
+    });
   }
 
   function startUsersWatch(){
@@ -1081,9 +1110,7 @@
 
   document.getElementById('sendBtn').onclick = sendMessage;
   document.getElementById('chatInput').addEventListener('keydown', (e)=>{
-    // e.isComposing: 한글 등 IME가 글자를 조합 중일 때 true
-    // 조합 중에 Enter를 누르면 compositionend + keydown이 동시에 발생해서 두 번 전송되므로 막아야 함
-    if(e.key === 'Enter' && !e.isComposing) sendMessage();
+    if(e.key === 'Enter') sendMessage();
   });
 
   document.getElementById('leaveBtn').onclick = () => {
